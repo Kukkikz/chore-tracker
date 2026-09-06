@@ -1,0 +1,41 @@
+{% extends "chores/base.html" %}
+
+{% block title %}History{% endblock %}
+
+{% block content %}
+<h1>Completion history</h1>
+
+<form method="get">
+    <label for="member">Filter by member</label>
+    <select name="member" id="member">
+        <option value="">everyone</option>
+        {% for member in members %}
+        <option value="{{ member.pk }}"{% if member.pk == selected_member_id %} selected{% endif %}>{{ member.name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+</form>
+
+{% if completions %}
+<table>
+    <thead>
+        <tr>
+            <th>Chore</th>
+            <th>Completed by</th>
+            <th>Completed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for completion in completions %}
+        <tr>
+            <td>{{ completion.chore.name }}</td>
+            <td>{{ completion.completed_by.name }}</td>
+            <td>{{ completion.completed_at|date:"M j, Y" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No completions recorded yet.</p>
+{% endif %}
+{% endblock %}

@@ -4,8 +4,9 @@ import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
 from django.urls import reverse
+from django.utils import timezone
 
-from chores.models import Chore, Member
+from chores.models import Chore, Completion, Member
 from chores.session import SESSION_KEY, get_current_member, require_member
 
 
@@ -18,10 +19,17 @@ def _make_chore(name, member, days, is_done=False):
     )
 
 
+def _make_due_chore(member, name):
+    return Chore.objects.create(name=name, assigned_to=member, due_date=date.today())
+
+
 def _sign_in(client, member):
     session = client.session
     session[SESSION_KEY] = member.pk
     session.save()
+
+
+_select_member = _sign_in
 
 
 @pytest.mark.django_db
@@ -178,3 +186,66 @@ def test_get_current_member_none_for_stale_id_and_clears_key(rf):
 
     assert get_current_member(request) is None
     assert SESSION_KEY not in request.session
+
+
+@pytest.mark.django_db
+def test_history_redirects_to_picker_when_no_member(client):
+    response = client.get(reverse("history"))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
+
+
+@pytest.mark.django_db
+def test_history_lists_completions_newest_first(client):
+    alice = Member.objects.create(name="Alice")
+    older = Completion.objects.create(
+        chore=_make_due_chore(alice, "Dishes"), completed_by=alice
+    )
+    Completion.objects.create(chore=_make_due_chore(alice, "Trash"), completed_by=alice)
+    Completion.objects.filter(pk=older.pk).update(
+        completed_at=timezone.now() - timedelta(days=2)
+    )
+    _select_member(client, alice)
+
+    content = client.get(reverse("history")).content.decode()
+
+    assert content.index("Trash") < content.index("Dishes")
+
+
+@pytest.mark.django_db
+def test_history_member_filter_narrows(client):
+    alice = Member.objects.create(name="Alice")
+    bob = Member.objects.create(name="Bob")
+    Completion.objects.create(chore=_make_due_chore(alice, "Dishes"), completed_by=alice)
+    Completion.objects.create(chore=_make_due_chore(bob, "Laundry"), completed_by=bob)
+    _select_member(client, alice)
+
+    content = client.get(reverse("history"), {"member": alice.pk}).content.decode()
+
+    assert "Dishes" in content
+    assert "Laundry" not in content
+
+
+@pytest.mark.django_db
+def test_history_invalid_member_falls_back_to_all(client):
+    alice = Member.objects.create(name="Alice")
+    bob = Member.objects.create(name="Bob")
+    Completion.objects.create(chore=_make_due_chore(alice, "Dishes"), completed_by=alice)
+    Completion.objects.create(chore=_make_due_chore(bob, "Laundry"), completed_by=bob)
+    _select_member(client, alice)
+
+    content = client.get(reverse("history"), {"member": "nope"}).content.decode()
+
+    assert "Dishes" in content
+    assert "Laundry" in content
+
+
+@pytest.mark.django_db
+def test_history_empty_state_renders_message(client):
+    alice = Member.objects.create(name="Alice")
+    _select_member(client, alice)
+
+    content = client.get(reverse("history")).content.decode()
+
+    assert "No completions recorded yet." in content
