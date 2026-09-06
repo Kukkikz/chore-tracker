@@ -1,0 +1,13 @@
+<header class="container">
+    <nav>
+        <ul>
+            <li><strong>Chore Tracker</strong></li>
+        </ul>
+        <ul>
+            {% if current_member %}
+            <li>{{ current_member.name }}</li>
+            <li><a href="{% url 'member-picker' %}">switch</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+</header>
