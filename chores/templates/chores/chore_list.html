@@ -1,0 +1,35 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Chores{% endblock %}
+
+{% block content %}
+<h1>Chores</h1>
+
+{% if chores %}
+<table>
+    <thead>
+        <tr>
+            <th>Chore</th>
+            <th>Assigned to</th>
+            <th>Due</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for chore in chores %}
+        <tr{% if chore.is_overdue %} class="overdue"{% endif %}>
+            <td>{{ chore.name }}</td>
+            <td>{{ chore.assigned_to.name }}</td>
+            <td>
+                {{ chore.due_date|date:"M j, Y" }}
+                {% if chore.is_overdue %}<mark>Overdue</mark>{% endif %}
+            </td>
+            <td></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>Nothing to do — every chore is done.</p>
+{% endif %}
+{% endblock %}

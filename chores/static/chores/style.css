@@ -1,1 +1,10 @@
 /* Project overrides on top of Pico.css. Keep this small. */
+
+tr.overdue td {
+    border-left: 4px solid #b32d2d;
+    background-color: #f7e4e4;
+}
+
+tr.overdue td:not(:first-child) {
+    border-left: 0;
+}

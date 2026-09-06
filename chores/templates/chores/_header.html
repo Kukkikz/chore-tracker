@@ -2,6 +2,9 @@
     <nav>
         <ul>
             <li><strong>Chore Tracker</strong></li>
+            <li><a href="{% url 'chore-list' %}">Chores</a></li>
+            <li><a href="/chores/new/">Add chore</a></li>
+            <li><a href="/history/">History</a></li>
         </ul>
         <ul>
             {% if current_member %}

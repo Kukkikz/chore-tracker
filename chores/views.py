@@ -1,9 +1,20 @@
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import Member
-from .session import SESSION_KEY
+from .models import Chore, Member
+from .session import SESSION_KEY, require_member
+
+
+@require_GET
+@require_member
+def chore_list(request):
+    chores = (
+        Chore.objects.filter(is_done=False)
+        .select_related("assigned_to")
+        .order_by("due_date", "name")
+    )
+    return render(request, "chores/chore_list.html", {"chores": chores})
 
 
 @require_http_methods(["GET", "POST"])
