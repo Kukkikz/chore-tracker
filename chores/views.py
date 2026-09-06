@@ -1,7 +1,9 @@
+from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods
 
+from .forms import ChoreForm
 from .models import Chore, Completion, Member
 from .session import SESSION_KEY, require_member
 
@@ -15,6 +17,21 @@ def chore_list(request):
         .order_by("due_date", "name")
     )
     return render(request, "chores/chore_list.html", {"chores": chores})
+
+
+@require_http_methods(["GET", "POST"])
+@require_member
+def chore_create(request):
+    if request.method == "POST":
+        form = ChoreForm(request.POST)
+        if form.is_valid():
+            chore = form.save()
+            messages.success(request, f'Added "{chore.name}"')
+            return redirect("chore-list")
+    else:
+        form = ChoreForm()
+
+    return render(request, "chores/chore_form.html", {"form": form})
 
 
 @require_http_methods(["GET", "POST"])

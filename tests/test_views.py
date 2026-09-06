@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import pytest
+from django.contrib.messages import get_messages
 from django.http import HttpResponse
 from django.test import RequestFactory
 from django.urls import reverse
@@ -87,6 +88,107 @@ def test_chore_list_redirects_to_picker_without_member(client):
 
     assert response.status_code == 302
     assert reverse("member-picker") in response["Location"]
+
+
+def _chore_post_data(member, **overrides):
+    data = {
+        "name": "Vacuum",
+        "is_recurring": "",
+        "recurrence_rule": "",
+        "assigned_to": str(member.pk),
+        "due_date": date.today().isoformat(),
+    }
+    data.update(overrides)
+    return data
+
+
+@pytest.mark.django_db
+def test_chore_create_get_renders_blank_form(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.get(reverse("chore-create"))
+
+    assert response.status_code == 200
+    assert "<form" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_chore_create_redirects_to_picker_without_member(client):
+    response = client.get(reverse("chore-create"))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
+
+
+@pytest.mark.django_db
+def test_chore_create_happy_path_creates_and_redirects(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.post(reverse("chore-create"), _chore_post_data(member))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("chore-list")
+    chore = Chore.objects.get()
+    assert chore.name == "Vacuum"
+    assert [str(m) for m in get_messages(response.wsgi_request)] == ['Added "Vacuum"']
+
+
+@pytest.mark.django_db
+def test_chore_create_success_message_shows_on_list(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-create"), _chore_post_data(member), follow=True
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "<article" in body
+    assert "Added" in body and "Vacuum" in body
+
+
+@pytest.mark.django_db
+def test_chore_create_recurring_missing_rule_creates_nothing(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-create"),
+        _chore_post_data(member, is_recurring="on", recurrence_rule=""),
+    )
+
+    assert response.status_code == 200
+    assert Chore.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_chore_create_recurring_bad_rule_creates_nothing(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-create"),
+        _chore_post_data(member, is_recurring="on", recurrence_rule="every_funday"),
+    )
+
+    assert response.status_code == 200
+    assert Chore.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_chore_create_non_recurring_ignores_submitted_rule(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    client.post(
+        reverse("chore-create"),
+        _chore_post_data(member, is_recurring="", recurrence_rule="every_monday"),
+    )
+
+    assert Chore.objects.get().recurrence_rule == ""
 
 
 @pytest.mark.django_db

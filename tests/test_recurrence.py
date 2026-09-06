@@ -2,7 +2,19 @@ from datetime import date
 
 import pytest
 
-from chores.recurrence import next_due_date
+from chores.recurrence import is_valid_rule, next_due_date
+
+
+def test_is_valid_rule_accepts_weekday_and_positive_n_days():
+    assert is_valid_rule("every_sunday")
+    assert is_valid_rule("every_3_days")
+
+
+def test_is_valid_rule_rejects_unknown_zero_and_non_string():
+    assert not is_valid_rule("every_funday")
+    assert not is_valid_rule("every_0_days")
+    assert not is_valid_rule("")
+    assert not is_valid_rule(None)
 
 
 def test_weekday_midweek_returns_next_occurrence():
