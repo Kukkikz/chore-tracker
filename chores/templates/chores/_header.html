@@ -5,6 +5,7 @@
         </ul>
         <ul>
             {% if current_member %}
+            <li><a href="{% url 'history' %}">History</a></li>
             <li>{{ current_member.name }}</li>
             <li><a href="{% url 'member-picker' %}">switch</a></li>
             {% endif %}

@@ -1,9 +1,9 @@
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import Member
-from .session import SESSION_KEY
+from .models import Completion, Member
+from .session import SESSION_KEY, require_member
 
 
 @require_http_methods(["GET", "POST"])
@@ -24,4 +24,29 @@ def member_picker(request):
         request,
         "chores/member_picker.html",
         {"members": Member.objects.all(), "next": request.GET.get("next", "")},
+    )
+
+
+@require_GET
+@require_member
+def history(request):
+    completions = Completion.objects.select_related("chore", "completed_by").order_by(
+        "-completed_at"
+    )
+
+    member_id = request.GET.get("member", "")
+    selected_member = None
+    if member_id.isdigit():
+        selected_member = Member.objects.filter(pk=member_id).first()
+    if selected_member is not None:
+        completions = completions.filter(completed_by=selected_member)
+
+    return render(
+        request,
+        "chores/history.html",
+        {
+            "completions": completions,
+            "members": Member.objects.all(),
+            "selected_member_id": selected_member.pk if selected_member else None,
+        },
     )
