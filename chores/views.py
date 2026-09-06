@@ -1,7 +1,11 @@
 from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import (
+    require_GET,
+    require_http_methods,
+    require_POST,
+)
 
 from .forms import ChoreForm
 from .models import Chore, Completion, Member
@@ -16,7 +20,31 @@ def chore_list(request):
         .select_related("assigned_to")
         .order_by("due_date", "name")
     )
-    return render(request, "chores/chore_list.html", {"chores": chores})
+    return render(
+        request,
+        "chores/chore_list.html",
+        {"chores": chores, "members": Member.objects.all()},
+    )
+
+
+@require_POST
+@require_member
+def chore_reassign(request, pk):
+    chore = get_object_or_404(Chore, pk=pk)
+
+    if chore.is_done:
+        messages.error(request, "Can't reassign a completed chore")
+        return redirect("chore-list")
+
+    member = Member.objects.filter(pk=request.POST.get("assigned_to")).first()
+    if member is None:
+        messages.error(request, "Pick a member to reassign to")
+        return redirect("chore-list")
+
+    chore.assigned_to = member
+    chore.save()
+    messages.success(request, f'Reassigned "{chore.name}" to {member.name}')
+    return redirect("chore-list")
 
 
 @require_http_methods(["GET", "POST"])

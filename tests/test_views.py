@@ -192,6 +192,97 @@ def test_chore_create_non_recurring_ignores_submitted_rule(client):
 
 
 @pytest.mark.django_db
+def test_reassign_happy_path_changes_assignee_and_redirects(client):
+    alex = Member.objects.create(name="Alex")
+    sam = Member.objects.create(name="Sam")
+    chore = _make_chore("Dishes", alex, 1)
+    _sign_in(client, alex)
+
+    response = client.post(
+        reverse("chore-reassign", args=[chore.pk]), {"assigned_to": sam.pk}
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("chore-list")
+    chore.refresh_from_db()
+    assert chore.assigned_to == sam
+
+
+@pytest.mark.django_db
+def test_reassign_same_member_is_a_no_op_success(client):
+    alex = Member.objects.create(name="Alex")
+    chore = _make_chore("Dishes", alex, 1)
+    _sign_in(client, alex)
+
+    response = client.post(
+        reverse("chore-reassign", args=[chore.pk]), {"assigned_to": alex.pk}
+    )
+
+    assert response.status_code == 302
+    chore.refresh_from_db()
+    assert chore.assigned_to == alex
+
+
+@pytest.mark.django_db
+def test_reassign_done_chore_is_rejected(client):
+    alex = Member.objects.create(name="Alex")
+    sam = Member.objects.create(name="Sam")
+    chore = _make_chore("Dishes", alex, 1, is_done=True)
+    _sign_in(client, alex)
+
+    response = client.post(
+        reverse("chore-reassign", args=[chore.pk]), {"assigned_to": sam.pk}
+    )
+
+    assert response.status_code == 302
+    chore.refresh_from_db()
+    assert chore.assigned_to == alex
+    assert "Can't reassign a completed chore" in [
+        str(m) for m in get_messages(response.wsgi_request)
+    ]
+
+
+@pytest.mark.django_db
+def test_reassign_invalid_member_id_is_rejected(client):
+    alex = Member.objects.create(name="Alex")
+    chore = _make_chore("Dishes", alex, 1)
+    _sign_in(client, alex)
+
+    response = client.post(
+        reverse("chore-reassign", args=[chore.pk]), {"assigned_to": "9999"}
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("chore-list")
+    chore.refresh_from_db()
+    assert chore.assigned_to == alex
+
+
+@pytest.mark.django_db
+def test_reassign_get_returns_405(client):
+    alex = Member.objects.create(name="Alex")
+    chore = _make_chore("Dishes", alex, 1)
+    _sign_in(client, alex)
+
+    response = client.get(reverse("chore-reassign", args=[chore.pk]))
+
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_reassign_without_member_redirects_to_picker(client):
+    alex = Member.objects.create(name="Alex")
+    chore = _make_chore("Dishes", alex, 1)
+
+    response = client.post(
+        reverse("chore-reassign", args=[chore.pk]), {"assigned_to": alex.pk}
+    )
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
+
+
+@pytest.mark.django_db
 def test_picker_get_lists_all_members(client):
     Member.objects.create(name="Alice")
     Member.objects.create(name="Bob")
