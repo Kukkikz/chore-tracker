@@ -139,3 +139,120 @@ def test_complete_on_done_chore_raises_and_writes_nothing():
 
     assert Completion.objects.count() == 0
     assert Chore.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_undo_one_off_clears_is_done_and_removes_row():
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Dishes", assigned_to=member, due_date=date.today()
+    )
+    chore.complete(member)
+    completion = Completion.objects.get()
+
+    completion.undo()
+
+    chore.refresh_from_db()
+    assert chore.is_done is False
+    assert Completion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_undo_recurring_removes_clean_spawned_chore():
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Water plants",
+        assigned_to=member,
+        due_date=date.today(),
+        is_recurring=True,
+        recurrence_rule="every_3_days",
+    )
+    spawned = chore.complete(member)
+    completion = chore.completions.get()
+
+    completion.undo()
+
+    chore.refresh_from_db()
+    assert chore.is_done is False
+    assert not Chore.objects.filter(pk=spawned.pk).exists()
+    assert Completion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_undo_refused_when_spawned_chore_is_done():
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Water plants",
+        assigned_to=member,
+        due_date=date.today(),
+        is_recurring=True,
+        recurrence_rule="every_3_days",
+    )
+    spawned = chore.complete(member)
+    spawned.complete(member)
+    completion = chore.completions.get()
+
+    assert completion.is_undoable is False
+    with pytest.raises(ValueError):
+        completion.undo()
+
+    chore.refresh_from_db()
+    assert chore.is_done is True
+    assert Chore.objects.filter(pk=spawned.pk).exists()
+    assert Completion.objects.filter(pk=completion.pk).exists()
+
+
+@pytest.mark.django_db
+def test_undo_refused_when_spawned_chore_has_its_own_completion():
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Water plants",
+        assigned_to=member,
+        due_date=date.today(),
+        is_recurring=True,
+        recurrence_rule="every_3_days",
+    )
+    spawned = chore.complete(member)
+    Completion.objects.create(chore=spawned, completed_by=member)
+    completion = chore.completions.get()
+
+    assert completion.is_undoable is False
+    with pytest.raises(ValueError):
+        completion.undo()
+
+    assert Completion.objects.filter(pk=completion.pk).exists()
+    assert Chore.objects.filter(pk=spawned.pk).exists()
+
+
+@pytest.mark.django_db
+def test_only_the_latest_completion_of_a_chore_is_undoable():
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Dishes", assigned_to=member, due_date=date.today()
+    )
+    old = Completion.objects.create(chore=chore, completed_by=member)
+    new = Completion.objects.create(chore=chore, completed_by=member)
+
+    assert old.is_undoable is False
+    assert new.is_undoable is True
+    with pytest.raises(ValueError):
+        old.undo()
+
+
+@pytest.mark.django_db
+def test_undo_recurring_without_valid_rule_behaves_like_one_off():
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Water plants",
+        assigned_to=member,
+        due_date=date.today(),
+        is_recurring=True,
+        recurrence_rule="every_3_days",
+    )
+    chore.complete(member)
+    Chore.objects.filter(pk=chore.pk).update(recurrence_rule="")
+    completion = Completion.objects.get()
+
+    completion.undo()
+
+    assert Completion.objects.count() == 0
