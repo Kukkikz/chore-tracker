@@ -35,7 +35,10 @@ pick your name from a list of household members).
 - "Who are you" handled by a session-stored member name (no auth/login).
 - Recurrence + overdue logic lives in `chores/models.py` (`Chore.is_overdue`
   property, `Chore.complete()` method, `next_due_date()` helper).
-- Only dependency for v1: `Django`.
+- Tooling: `venv` + `uv` for environment/dependencies, dependencies declared in
+  `pyproject.toml` (no `requirements.txt`).
+- Tests run with `pytest` (via `pytest-django`), not `manage.py test`.
+- Runtime dependency for v1: `Django`. Dev dependencies: `pytest`, `pytest-django`.
 
 Rationale: the data model is already expressed in Django ORM terms, the app is
 small and single-household, and the admin gives free CRUD. Rejected alternatives:
