@@ -39,6 +39,8 @@
                     </select>
                     <button type="submit" class="secondary">Reassign</button>
                 </form>
+                <a href="{% url 'chore-edit' chore.pk %}" role="button">Edit</a>
+                <a href="{% url 'chore-delete' chore.pk %}" role="button" class="secondary">Delete</a>
                 {% endif %}
             </td>
         </tr>

@@ -512,3 +512,278 @@ def test_history_empty_state_renders_message(client):
     content = client.get(reverse("history")).content.decode()
 
     assert "No completions recorded yet." in content
+
+
+# --- edit / delete a chore -------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_chore_list_shows_edit_delete_on_not_done_rows(client):
+    member = Member.objects.create(name="Alex")
+    _make_chore("Active", member, 3)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-list")).content.decode()
+
+    assert ">Edit</a>" in body
+    assert '"secondary">Delete</a>' in body
+
+
+@pytest.mark.django_db
+def test_chore_list_hides_edit_delete_when_all_done(client):
+    member = Member.objects.create(name="Alex")
+    _make_chore("Finished", member, 3, is_done=True)
+    _make_chore("Active", member, 1)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-list")).content.decode()
+
+    assert body.count(">Edit</a>") == 1
+    assert body.count(">Delete</a>") == 1
+
+
+@pytest.mark.django_db
+def test_edit_get_prefills_form(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop floor", member, 3)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-edit", args=[chore.pk])).content.decode()
+
+    assert "Mop floor" in body
+    assert "<form" in body
+
+
+@pytest.mark.django_db
+def test_edit_happy_path_saves_and_redirects(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-edit", args=[chore.pk]),
+        _chore_post_data(member, name="Mop the kitchen"),
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("chore-list")
+    chore.refresh_from_db()
+    assert chore.name == "Mop the kitchen"
+    assert "Mop the kitchen" in [str(m) for m in get_messages(response.wsgi_request)][0]
+
+
+@pytest.mark.django_db
+def test_edit_invalid_recurrence_rerenders_and_saves_nothing(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-edit", args=[chore.pk]),
+        _chore_post_data(
+            member, name="Changed", is_recurring="on", recurrence_rule="every_funday"
+        ),
+    )
+
+    assert response.status_code == 200
+    assert "not a recognised rule" in response.content.decode()
+    chore.refresh_from_db()
+    assert chore.name == "Mop"
+
+
+@pytest.mark.django_db
+def test_edit_recurring_missing_rule_is_a_form_error(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-edit", args=[chore.pk]),
+        _chore_post_data(member, is_recurring="on", recurrence_rule=""),
+    )
+
+    assert response.status_code == 200
+    assert "needs a recurrence rule" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_edit_done_chore_is_rejected_and_unchanged(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3, is_done=True)
+    _sign_in(client, member)
+
+    get_response = client.get(reverse("chore-edit", args=[chore.pk]))
+    post_response = client.post(
+        reverse("chore-edit", args=[chore.pk]),
+        _chore_post_data(member, name="Changed"),
+    )
+
+    assert get_response.status_code == 302
+    assert post_response.status_code == 302
+    chore.refresh_from_db()
+    assert chore.name == "Mop"
+    assert "Can't edit a completed chore" in [
+        str(m) for m in get_messages(post_response.wsgi_request)
+    ]
+
+
+@pytest.mark.django_db
+def test_edit_wrong_verb_returns_405(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    response = client.put(reverse("chore-edit", args=[chore.pk]))
+
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_edit_unknown_id_returns_404(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.get(reverse("chore-edit", args=[9999]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_edit_without_member_redirects_to_picker(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+
+    response = client.get(reverse("chore-edit", args=[chore.pk]))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
+
+
+@pytest.mark.django_db
+def test_delete_get_renders_confirm_page_and_deletes_nothing(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-delete", args=[chore.pk])).content.decode()
+
+    assert "Mop" in body
+    assert '<form method="post">' in body
+    assert Chore.objects.filter(pk=chore.pk).exists()
+
+
+@pytest.mark.django_db
+def test_delete_confirm_page_reports_completion_count(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    Completion.objects.create(chore=chore, completed_by=member)
+    Completion.objects.create(chore=chore, completed_by=member)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-delete", args=[chore.pk])).content.decode()
+
+    assert "2 completion" in body
+
+
+@pytest.mark.django_db
+def test_delete_happy_path_removes_chore_and_completions(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    Completion.objects.create(chore=chore, completed_by=member)
+    _sign_in(client, member)
+
+    response = client.post(reverse("chore-delete", args=[chore.pk]))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("chore-list")
+    assert not Chore.objects.filter(pk=chore.pk).exists()
+    assert Completion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_delete_message_notes_completion_count(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    Completion.objects.create(chore=chore, completed_by=member)
+    _sign_in(client, member)
+
+    response = client.post(reverse("chore-delete", args=[chore.pk]))
+
+    message = [str(m) for m in get_messages(response.wsgi_request)][0]
+    assert "1 completion" in message
+
+
+@pytest.mark.django_db
+def test_delete_message_omits_count_when_zero(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    response = client.post(reverse("chore-delete", args=[chore.pk]))
+
+    message = [str(m) for m in get_messages(response.wsgi_request)][0]
+    assert "completion" not in message
+    assert "Mop" in message
+
+
+@pytest.mark.django_db
+def test_delete_done_chore_is_allowed_and_cascades(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3, is_done=True)
+    Completion.objects.create(chore=chore, completed_by=member)
+    _sign_in(client, member)
+
+    confirm = client.get(reverse("chore-delete", args=[chore.pk])).content.decode()
+    response = client.post(reverse("chore-delete", args=[chore.pk]))
+
+    assert "1 completion" in confirm
+    assert response.status_code == 302
+    assert not Chore.objects.filter(pk=chore.pk).exists()
+    assert Completion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_delete_without_csrf_returns_403():
+    from django.test import Client
+
+    csrf_client = Client(enforce_csrf_checks=True)
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(csrf_client, member)
+
+    response = csrf_client.post(reverse("chore-delete", args=[chore.pk]))
+
+    assert response.status_code == 403
+    assert Chore.objects.filter(pk=chore.pk).exists()
+
+
+@pytest.mark.django_db
+def test_delete_wrong_verb_returns_405(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+    _sign_in(client, member)
+
+    response = client.patch(reverse("chore-delete", args=[chore.pk]))
+
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_delete_unknown_id_returns_404(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.get(reverse("chore-delete", args=[9999]))
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_delete_without_member_redirects_to_picker(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_chore("Mop", member, 3)
+
+    response = client.get(reverse("chore-delete", args=[chore.pk]))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]

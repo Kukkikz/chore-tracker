@@ -1,9 +1,9 @@
 {% extends "chores/base.html" %}
 
-{% block title %}Add chore{% endblock %}
+{% block title %}{% if chore %}Edit chore{% else %}Add chore{% endif %}{% endblock %}
 
 {% block content %}
-<h1>Add chore</h1>
+<h1>{% if chore %}Edit chore{% else %}Add chore{% endif %}</h1>
 
 <form method="post">
     {% csrf_token %}
@@ -29,6 +29,6 @@
     {{ form.due_date }}
     {{ form.due_date.errors }}
 
-    <button type="submit">Add chore</button>
+    <button type="submit">{% if chore %}Save changes{% else %}Add chore{% endif %}</button>
 </form>
 {% endblock %}
