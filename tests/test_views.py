@@ -136,6 +136,21 @@ def test_chore_create_happy_path_creates_and_redirects(client):
 
 
 @pytest.mark.django_db
+def test_chore_create_success_message_shows_on_list(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.post(
+        reverse("chore-create"), _chore_post_data(member), follow=True
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "<article" in body
+    assert "Added" in body and "Vacuum" in body
+
+
+@pytest.mark.django_db
 def test_chore_create_recurring_missing_rule_creates_nothing(client):
     member = Member.objects.create(name="Alex")
     _sign_in(client, member)
