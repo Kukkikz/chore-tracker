@@ -11,4 +11,9 @@ urlpatterns = [
     path("chores/<int:pk>/delete/", views.chore_delete, name="chore-delete"),
     path("whoareyou/", views.member_picker, name="member-picker"),
     path("history/", views.history, name="history"),
+    path(
+        "completions/<int:pk>/undo/",
+        views.completion_undo,
+        name="completion-undo",
+    ),
 ]

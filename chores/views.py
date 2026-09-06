@@ -137,6 +137,27 @@ def chore_delete(request, pk):
     )
 
 
+@require_POST
+@require_member
+def completion_undo(request, pk):
+    completion = get_object_or_404(Completion, pk=pk)
+    chore_name = completion.chore.name
+
+    try:
+        completion.undo()
+    except ValueError:
+        if not completion._is_latest_for_chore:
+            messages.error(request, "That completion can't be undone")
+        else:
+            messages.error(
+                request, "The next occurrence has already been worked on"
+            )
+        return redirect("history")
+
+    messages.success(request, f'Undid the completion of "{chore_name}"')
+    return redirect("history")
+
+
 @require_http_methods(["GET", "POST"])
 def member_picker(request):
     if request.method == "POST":
@@ -171,6 +192,11 @@ def history(request):
         selected_member = Member.objects.filter(pk=member_id).first()
     if selected_member is not None:
         completions = completions.filter(completed_by=selected_member)
+
+    latest_pks = Completion.latest_completion_pks()
+    completions = list(completions)
+    for completion in completions:
+        completion.is_latest_for_chore = completion.pk in latest_pks
 
     return render(
         request,

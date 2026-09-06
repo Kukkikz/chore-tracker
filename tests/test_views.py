@@ -659,6 +659,121 @@ def test_edit_without_member_redirects_to_picker(client):
     assert reverse("member-picker") in response["Location"]
 
 
+# --- undo a completion ---------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_undo_happy_path_redirects_to_history_and_chore_reappears(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    chore.complete(member)
+    completion = Completion.objects.get()
+    _sign_in(client, member)
+
+    response = client.post(reverse("completion-undo", args=[completion.pk]))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("history")
+    assert "Sweep" in [str(m) for m in get_messages(response.wsgi_request)][0]
+    chore.refresh_from_db()
+    assert chore.is_done is False
+    list_body = client.get(reverse("chore-list")).content.decode()
+    assert "<td>Sweep</td>" in list_body
+
+
+@pytest.mark.django_db
+def test_undo_history_row_shows_control_only_on_latest(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    Completion.objects.create(chore=chore, completed_by=member)
+    Completion.objects.create(chore=chore, completed_by=member)
+    _sign_in(client, member)
+
+    body = client.get(reverse("history")).content.decode()
+
+    assert body.count("completions/") == 1
+
+
+@pytest.mark.django_db
+def test_undo_refused_redirects_with_error_and_changes_nothing(client):
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Water plants",
+        assigned_to=member,
+        due_date=date.today(),
+        is_recurring=True,
+        recurrence_rule="every_3_days",
+    )
+    spawned = chore.complete(member)
+    spawned.complete(member)
+    completion = chore.completions.get()
+    _sign_in(client, member)
+
+    response = client.post(reverse("completion-undo", args=[completion.pk]))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("history")
+    assert "already been worked on" in [
+        str(m) for m in get_messages(response.wsgi_request)
+    ][0]
+    assert Completion.objects.filter(pk=completion.pk).exists()
+    assert Chore.objects.filter(pk=spawned.pk).exists()
+
+
+@pytest.mark.django_db
+def test_undo_get_returns_405(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    chore.complete(member)
+    completion = Completion.objects.get()
+    _sign_in(client, member)
+
+    response = client.get(reverse("completion-undo", args=[completion.pk]))
+
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_undo_without_member_redirects_to_picker(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    chore.complete(member)
+    completion = Completion.objects.get()
+
+    response = client.post(reverse("completion-undo", args=[completion.pk]))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
+    assert Completion.objects.filter(pk=completion.pk).exists()
+
+
+@pytest.mark.django_db
+def test_undo_without_csrf_returns_403():
+    from django.test import Client
+
+    csrf_client = Client(enforce_csrf_checks=True)
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    chore.complete(member)
+    completion = Completion.objects.get()
+    _sign_in(csrf_client, member)
+
+    response = csrf_client.post(reverse("completion-undo", args=[completion.pk]))
+
+    assert response.status_code == 403
+    assert Completion.objects.filter(pk=completion.pk).exists()
+
+
+@pytest.mark.django_db
+def test_undo_unknown_id_returns_404(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    response = client.post(reverse("completion-undo", args=[9999]))
+
+    assert response.status_code == 404
+
+
 @pytest.mark.django_db
 def test_delete_get_renders_confirm_page_and_deletes_nothing(client):
     member = Member.objects.create(name="Alex")
