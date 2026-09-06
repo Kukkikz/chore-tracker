@@ -24,6 +24,24 @@ pick your name from a list of household members).
    - Chores past their due date and not yet completed are visually flagged
      as overdue.
 
+## Tech Stack Decision
+
+**Chosen: Django + server-rendered templates + SQLite** (Option A).
+
+- Django project `chore_tracker/`, single app `chores/`.
+- SQLite database; no separate API layer or frontend build.
+- Django admin used for member/chore seeding and CRUD.
+- Function-based views with Django templates; Pico.css (CDN) for styling.
+- "Who are you" handled by a session-stored member name (no auth/login).
+- Recurrence + overdue logic lives in `chores/models.py` (`Chore.is_overdue`
+  property, `Chore.complete()` method, `next_due_date()` helper).
+- Only dependency for v1: `Django`.
+
+Rationale: the data model is already expressed in Django ORM terms, the app is
+small and single-household, and the admin gives free CRUD. Rejected alternatives:
+Django + htmx (deferred; can layer on later), FastAPI + React, Next.js + Prisma
+(all add moving parts not justified for v1).
+
 ## Out of scope for v1
 - Multiple households / accounts / login
 - Notifications or reminders
