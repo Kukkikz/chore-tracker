@@ -1,10 +1,84 @@
+from datetime import date, timedelta
+
 import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
 from django.urls import reverse
 
-from chores.models import Member
+from chores.models import Chore, Member
 from chores.session import SESSION_KEY, get_current_member, require_member
+
+
+def _make_chore(name, member, days, is_done=False):
+    return Chore.objects.create(
+        name=name,
+        assigned_to=member,
+        due_date=date.today() + timedelta(days=days),
+        is_done=is_done,
+    )
+
+
+def _sign_in(client, member):
+    session = client.session
+    session[SESSION_KEY] = member.pk
+    session.save()
+
+
+@pytest.mark.django_db
+def test_chore_list_shows_only_not_done_chores_in_due_date_order(client):
+    member = Member.objects.create(name="Alex")
+    _make_chore("Later", member, 5)
+    _make_chore("Sooner", member, 1)
+    _make_chore("Finished", member, 2, is_done=True)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-list")).content.decode()
+
+    assert "Finished" not in body
+    assert body.index("Sooner") < body.index("Later")
+
+
+@pytest.mark.django_db
+def test_chore_list_flags_overdue_row_with_class_and_badge(client):
+    member = Member.objects.create(name="Alex")
+    _make_chore("Take out trash", member, -2)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-list")).content.decode()
+
+    assert "overdue" in body
+    assert "Overdue" in body
+
+
+@pytest.mark.django_db
+def test_chore_list_does_not_flag_chore_due_today(client):
+    member = Member.objects.create(name="Alex")
+    _make_chore("Dishes", member, 0)
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-list")).content.decode()
+
+    assert "overdue" not in body
+    assert "Overdue" not in body
+
+
+@pytest.mark.django_db
+def test_chore_list_empty_state_message_and_no_table(client):
+    member = Member.objects.create(name="Alex")
+    _sign_in(client, member)
+
+    body = client.get(reverse("chore-list")).content.decode()
+
+    assert "Nothing to do" in body
+    assert "<table" not in body
+
+
+@pytest.mark.django_db
+def test_chore_list_redirects_to_picker_without_member(client):
+    response = client.get(reverse("chore-list"))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
 
 
 @pytest.mark.django_db
