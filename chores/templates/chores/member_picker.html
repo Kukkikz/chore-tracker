@@ -1,0 +1,20 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Who are you?{% endblock %}
+
+{% block content %}
+<h1>Who are you?</h1>
+
+{% if members %}
+    {% for member in members %}
+    <form method="post" action="{% url 'member-picker' %}">
+        {% csrf_token %}
+        <input type="hidden" name="member_id" value="{{ member.pk }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit">{{ member.name }}</button>
+    </form>
+    {% endfor %}
+{% else %}
+    <p>no members yet — add one in /admin</p>
+{% endif %}
+{% endblock %}
