@@ -24,7 +24,19 @@
                 {{ chore.due_date|date:"M j, Y" }}
                 {% if chore.is_overdue %}<mark>Overdue</mark>{% endif %}
             </td>
-            <td></td>
+            <td>
+                {% if not chore.is_done %}
+                <form method="post" action="{% url 'chore-reassign' chore.pk %}">
+                    {% csrf_token %}
+                    <select name="assigned_to" aria-label="Reassign to">
+                        {% for member in members %}
+                        <option value="{{ member.pk }}"{% if member.pk == chore.assigned_to_id %} selected{% endif %}>{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="secondary">Reassign</button>
+                </form>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
