@@ -7,6 +7,8 @@ urlpatterns = [
     path("chores/new/", views.chore_create, name="chore-create"),
     path("chores/<int:pk>/reassign/", views.chore_reassign, name="chore-reassign"),
     path("chores/<int:pk>/complete/", views.chore_complete, name="chore-complete"),
+    path("chores/<int:pk>/edit/", views.chore_edit, name="chore-edit"),
+    path("chores/<int:pk>/delete/", views.chore_delete, name="chore-delete"),
     path("whoareyou/", views.member_picker, name="member-picker"),
     path("history/", views.history, name="history"),
 ]

@@ -87,6 +87,57 @@ def chore_create(request):
 
 
 @require_http_methods(["GET", "POST"])
+@require_member
+def chore_edit(request, pk):
+    chore = get_object_or_404(Chore, pk=pk)
+
+    if chore.is_done:
+        messages.error(request, "Can't edit a completed chore")
+        return redirect("chore-list")
+
+    if request.method == "POST":
+        form = ChoreForm(request.POST, instance=chore)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Updated "{chore.name}"')
+            return redirect("chore-list")
+    else:
+        form = ChoreForm(instance=chore)
+
+    return render(
+        request,
+        "chores/chore_form.html",
+        {"form": form, "chore": chore},
+    )
+
+
+@require_http_methods(["GET", "POST"])
+@require_member
+def chore_delete(request, pk):
+    chore = get_object_or_404(Chore, pk=pk)
+    completion_count = chore.completions.count()
+
+    if request.method == "POST":
+        name = chore.name
+        chore.delete()
+        if completion_count:
+            records = "record" if completion_count == 1 else "records"
+            messages.success(
+                request,
+                f'Deleted "{name}" and {completion_count} completion {records}',
+            )
+        else:
+            messages.success(request, f'Deleted "{name}"')
+        return redirect("chore-list")
+
+    return render(
+        request,
+        "chores/chore_confirm_delete.html",
+        {"chore": chore, "completion_count": completion_count},
+    )
+
+
+@require_http_methods(["GET", "POST"])
 def member_picker(request):
     if request.method == "POST":
         member = Member.objects.filter(pk=request.POST.get("member_id")).first()
