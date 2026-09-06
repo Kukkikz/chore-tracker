@@ -26,6 +26,10 @@
             </td>
             <td>
                 {% if not chore.is_done %}
+                <form method="post" action="{% url 'chore-complete' chore.pk %}">
+                    {% csrf_token %}
+                    <button type="submit">Done</button>
+                </form>
                 <form method="post" action="{% url 'chore-reassign' chore.pk %}">
                     {% csrf_token %}
                     <select name="assigned_to" aria-label="Reassign to">
