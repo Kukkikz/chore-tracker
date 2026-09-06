@@ -103,6 +103,76 @@ def _chore_post_data(member, **overrides):
 
 
 @pytest.mark.django_db
+def test_complete_one_off_logs_completion_and_drops_from_list(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    _sign_in(client, member)
+
+    response = client.post(reverse("chore-complete", args=[chore.pk]), follow=True)
+
+    completion = Completion.objects.get()
+    assert completion.completed_by == member
+    assert "<td>Sweep</td>" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_complete_recurring_spawns_next_occurrence(client):
+    member = Member.objects.create(name="Alex")
+    chore = Chore.objects.create(
+        name="Water plants",
+        assigned_to=member,
+        due_date=date.today(),
+        is_recurring=True,
+        recurrence_rule="every_7_days",
+    )
+    _sign_in(client, member)
+
+    body = client.post(
+        reverse("chore-complete", args=[chore.pk]), follow=True
+    ).content.decode()
+
+    new_chore = Chore.objects.get(is_done=False)
+    assert new_chore.due_date == date.today() + timedelta(days=7)
+    assert "Water plants" in body
+
+
+@pytest.mark.django_db
+def test_complete_without_member_redirects_to_picker_and_logs_nothing(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+
+    response = client.post(reverse("chore-complete", args=[chore.pk]))
+
+    assert response.status_code == 302
+    assert reverse("member-picker") in response["Location"]
+    assert Completion.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_complete_double_post_creates_exactly_one_completion(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    _sign_in(client, member)
+
+    client.post(reverse("chore-complete", args=[chore.pk]))
+    response = client.post(reverse("chore-complete", args=[chore.pk]))
+
+    assert response.status_code == 302
+    assert Completion.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_complete_get_returns_405(client):
+    member = Member.objects.create(name="Alex")
+    chore = _make_due_chore(member, "Sweep")
+    _sign_in(client, member)
+
+    response = client.get(reverse("chore-complete", args=[chore.pk]))
+
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
 def test_chore_create_get_renders_blank_form(client):
     member = Member.objects.create(name="Alex")
     _sign_in(client, member)

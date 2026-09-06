@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.template.defaultfilters import date as date_filter
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import (
@@ -9,7 +10,7 @@ from django.views.decorators.http import (
 
 from .forms import ChoreForm
 from .models import Chore, Completion, Member
-from .session import SESSION_KEY, require_member
+from .session import SESSION_KEY, get_current_member, require_member
 
 
 @require_GET
@@ -44,6 +45,29 @@ def chore_reassign(request, pk):
     chore.assigned_to = member
     chore.save()
     messages.success(request, f'Reassigned "{chore.name}" to {member.name}')
+    return redirect("chore-list")
+
+
+@require_POST
+@require_member
+def chore_complete(request, pk):
+    chore = get_object_or_404(Chore, pk=pk)
+    member = get_current_member(request)
+
+    try:
+        next_chore = chore.complete(member)
+    except ValueError:
+        messages.info(request, f'"{chore.name}" is already completed')
+        return redirect("chore-list")
+
+    if next_chore is not None:
+        next_due = date_filter(next_chore.due_date, "M j, Y")
+        messages.success(
+            request,
+            f'Marked "{chore.name}" done — next due {next_due}',
+        )
+    else:
+        messages.success(request, f'Marked "{chore.name}" done')
     return redirect("chore-list")
 
 
