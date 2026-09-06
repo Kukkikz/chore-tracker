@@ -1,4 +1,8 @@
-from django.db import models
+from datetime import date
+
+from django.db import models, transaction
+
+from chores.recurrence import next_due_date
 
 
 class Member(models.Model):
@@ -22,6 +26,31 @@ class Chore(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_overdue(self):
+        return self.is_done is False and self.due_date < date.today()
+
+    def complete(self, member):
+        if self.is_done:
+            raise ValueError("Chore is already done")
+
+        with transaction.atomic():
+            Completion.objects.create(chore=self, completed_by=member)
+            self.is_done = True
+            self.save()
+
+            if not self.is_recurring:
+                return None
+
+            return Chore.objects.create(
+                name=self.name,
+                assigned_to=self.assigned_to,
+                is_recurring=True,
+                recurrence_rule=self.recurrence_rule,
+                is_done=False,
+                due_date=next_due_date(self.recurrence_rule, self.due_date),
+            )
 
 
 class Completion(models.Model):
